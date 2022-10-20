@@ -8,6 +8,12 @@ struct Item {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct Items {
+    #[serde(rename = "$value")]
+    items: Vec<Item>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 enum Node {
     Boolean(bool),
     Identifier { value: String, index: u32 },
@@ -19,6 +25,30 @@ struct Nodes {
     #[serde(rename = "$value")]
     items: Vec<Node>,
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct Quiet(bool);
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct ObjectVersionId(String);
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct Delete {
+    pub objects: ObjectIdentifierList,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quiet: Option<Quiet>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct ObjectIdentifier {
+    pub key: ObjectKey,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version_id: Option<ObjectVersionId>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct ObjectKey(String);
+
+type ObjectIdentifierList = Vec<ObjectIdentifier>;
 
 #[test]
 fn basic_struct() {
@@ -89,4 +119,57 @@ fn whitespace_preserving_config() {
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Item><name>  space banana  </name><source>   fantasy costco   </source></Item>";
     let reserialized_item = to_string(&item).unwrap();
     assert_eq!(reserialized_item, serialized_should_be);
+}
+
+#[test]
+fn round_trip_list_of_structs() {
+    let src = r#"<?xml version="1.0" encoding="UTF-8"?><Items><Item><name>Apple</name><source>Store</source></Item><Item><name>Orange</name><source>Store</source></Item></Items>"#;
+    let should_be = Items {
+        items: vec![
+            Item {
+                name: "Apple".to_string(),
+                source: "Store".to_string(),
+            },
+            Item {
+                name: "Orange".to_string(),
+                source: "Store".to_string(),
+            },
+        ],
+    };
+
+    let items: Items = from_str(src).unwrap();
+    assert_eq!(items, should_be);
+
+    let reserialized_items = to_string(&items).unwrap();
+    assert_eq!(src, reserialized_items);
+}
+
+#[test]
+#[ignore]
+// Serialization is working, but not deserialization
+fn round_trip_complex() {
+    let src = r#"<?xml version="1.0" encoding="UTF-8"?><Delete><objects><ObjectIdentifier><key>toto</key><version_id>version</version_id></ObjectIdentifier><ObjectIdentifier><key>toto</key></ObjectIdentifier><ObjectIdentifier><key>toto</key><version_id>version</version_id></ObjectIdentifier></objects><quiet>true</quiet></Delete>"#;
+    let should_be = Delete {
+        objects: vec![
+            ObjectIdentifier {
+                key: ObjectKey("foo".to_owned()),
+                version_id: Some(ObjectVersionId("version1".to_owned())),
+            },
+            ObjectIdentifier {
+                key: ObjectKey("bar".to_owned()),
+                version_id: None,
+            },
+            ObjectIdentifier {
+                key: ObjectKey("baz".to_owned()),
+                version_id: Some(ObjectVersionId("version2".to_owned())),
+            },
+        ],
+        quiet: Some(Quiet(true)),
+    };
+
+    let delete: Delete = from_str(src).unwrap();
+    assert_eq!(delete, should_be);
+
+    let reserialized_items = to_string(&delete).unwrap();
+    assert_eq!(src, reserialized_items);
 }

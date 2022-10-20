@@ -132,17 +132,6 @@ where
         Ok(())
     }
 
-    fn reopen_tag(&mut self) -> Result<()> {
-        self.current_tag_attrs = Some(HashMap::new());
-        Ok(())
-    }
-
-    fn abandon_tag(&mut self) -> Result<()> {
-        self.current_tag = "".into();
-        self.current_tag_attrs = None;
-        Ok(())
-    }
-
     fn add_attr(&mut self, name: &'static str, value: String) -> Result<()> {
         self.current_tag_attrs
             .as_mut()
@@ -336,7 +325,8 @@ impl<'ser, W: Write> serde::ser::Serializer for &'ser mut Serializer<W> {
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
         debug!("Sequence");
-        Ok(SeqSeralizer::new(self))
+        let must_close_tag = self.build_start_tag()?;
+        Ok(SeqSeralizer::new(self, must_close_tag))
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
@@ -374,7 +364,11 @@ impl<'ser, W: Write> serde::ser::Serializer for &'ser mut Serializer<W> {
     }
 
     fn serialize_struct(self, name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        self.open_root_tag(name)?;
+        if self.root {
+            self.open_root_tag(name)?;
+        } else {
+            self.open_tag(name)?;
+        }
 
         debug!("Struct {}", name);
         Ok(StructSerializer::new(self, false))
